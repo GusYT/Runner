@@ -51,13 +51,38 @@
       background: #1a1a1f;
       border: 2px solid #ffffff;
       border-radius: 12px;
+      touch-action: manipulation;
     }
 
     .controls {
-      margin-top: 10px;
+      margin-top: 12px;
       text-align: center;
       color: #cfcfcf;
       font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .buttons {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: none;
+      background: #ffffff;
+      color: #111;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #e9e9e9;
     }
   </style>
 </head>
@@ -70,8 +95,15 @@
 
     <canvas id="game" width="1000" height="320"></canvas>
 
+    <div class="buttons">
+      <button id="startBtn">Start</button>
+      <button id="jumpBtn">Jump</button>
+      <button id="restartBtn">Restart</button>
+    </div>
+
     <div class="controls">
-      Press <strong>Space</strong> / <strong>↑</strong> to jump • Press <strong>R</strong> to restart
+      <div><strong>Desktop:</strong> Space = Start / Jump / Restart, ↑ = Jump, R = Restart</div>
+      <div><strong>Mobile:</strong> Tap the game = Start / Jump / Restart</div>
     </div>
   </div>
 
@@ -80,15 +112,21 @@
     const ctx = canvas.getContext("2d");
     const scoreEl = document.getElementById("score");
 
+    const startBtn = document.getElementById("startBtn");
+    const jumpBtn = document.getElementById("jumpBtn");
+    const restartBtn = document.getElementById("restartBtn");
+
     ctx.imageSmoothingEnabled = false;
 
     const GROUND_Y = 250;
 
     let score = 0;
-    let speed = 6;
+    let baseSpeed = 6;
+    let speed = baseSpeed;
     let gameOver = false;
+    let gameStarted = false;
     let spawnTimer = 0;
-    let animationId = null;
+    let groundOffset = 0;
 
     const doomfist = new Image();
     doomfist.src = "Doomfist.png";
@@ -109,19 +147,49 @@
 
     let enemies = [];
 
-    function resetGame() {
-      score = 0;
-      speed = 6;
-      gameOver = false;
-      spawnTimer = 50;
-      enemies = [];
+    function resetPlayer() {
       player.y = GROUND_Y - player.height;
       player.vy = 0;
       player.grounded = true;
     }
 
+    function resetGame() {
+      score = 0;
+      speed = baseSpeed;
+      gameOver = false;
+      gameStarted = false;
+      spawnTimer = 60;
+      groundOffset = 0;
+      enemies = [];
+      resetPlayer();
+      scoreEl.textContent = score;
+    }
+
+    function startGame() {
+      score = 0;
+      speed = baseSpeed;
+      gameOver = false;
+      gameStarted = true;
+      spawnTimer = 60;
+      groundOffset = 0;
+      enemies = [];
+      resetPlayer();
+      scoreEl.textContent = score;
+    }
+
+    function restartGame() {
+      score = 0;
+      speed = baseSpeed;
+      gameOver = false;
+      gameStarted = true;
+      spawnTimer = 60;
+      groundOffset = 0;
+      enemies = [];
+      resetPlayer();
+      scoreEl.textContent = score;
+    }
+
     function jump() {
-      if (gameOver) return;
       if (player.grounded) {
         player.vy = player.jumpPower;
         player.grounded = false;
@@ -153,7 +221,18 @@
 
       if (spawnTimer <= 0) {
         spawnEnemy();
-        spawnTimer = Math.floor(85 + Math.random() * 45);
+
+        const minSpawn = 55;
+        const maxSpawn = 95;
+        const speedFactor = Math.min((speed - baseSpeed) * 3, 25);
+
+        spawnTimer = Math.floor(
+          minSpawn + Math.random() * (maxSpawn - minSpawn) - speedFactor
+        );
+
+        if (spawnTimer < 38) {
+          spawnTimer = 38;
+        }
       }
 
       for (let i = enemies.length - 1; i >= 0; i--) {
@@ -162,8 +241,14 @@
         if (enemies[i].x + enemies[i].width < 0) {
           enemies.splice(i, 1);
           score++;
-          if (score % 5 === 0) speed += 0.35;
         }
+      }
+    }
+
+    function updateGround() {
+      groundOffset += speed;
+      if (groundOffset >= 36) {
+        groundOffset = 0;
       }
     }
 
@@ -199,11 +284,9 @@
     function drawBackground() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // sky
       ctx.fillStyle = "#1a1a1f";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // ground line
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -211,15 +294,14 @@
       ctx.lineTo(canvas.width, GROUND_Y);
       ctx.stroke();
 
-      // floor decoration
       ctx.fillStyle = "#888";
-      for (let i = 0; i < canvas.width; i += 36) {
-        ctx.fillRect(i, GROUND_Y + 10, 18, 3);
+      for (let i = -36; i < canvas.width + 36; i += 36) {
+        ctx.fillRect(i - groundOffset, GROUND_Y + 10, 18, 3);
       }
     }
 
     function drawPlayer() {
-      if (doomfist.complete) {
+      if (doomfist.complete && doomfist.naturalWidth > 0) {
         ctx.drawImage(
           doomfist,
           player.x,
@@ -235,7 +317,7 @@
 
     function drawEnemies() {
       for (const enemy of enemies) {
-        if (ana.complete) {
+        if (ana.complete && ana.naturalWidth > 0) {
           ctx.drawImage(
             ana,
             enemy.x,
@@ -250,59 +332,118 @@
       }
     }
 
+    function drawOverlay() {
+      ctx.textAlign = "center";
+
+      if (!gameStarted) {
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(canvas.width / 2 - 230, 70, 460, 120);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 30px Arial";
+        ctx.fillText("Overwatch Runner", canvas.width / 2, 110);
+
+        ctx.font = "18px Arial";
+        ctx.fillText("Press Space or tap to start", canvas.width / 2, 145);
+      }
+
+      if (gameOver) {
+        ctx.fillStyle = "rgba(0,0,0,0.65)";
+        ctx.fillRect(canvas.width / 2 - 180, 80, 360, 110);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 30px Arial";
+        ctx.fillText("GAME OVER", canvas.width / 2, 120);
+
+        ctx.font = "18px Arial";
+        ctx.fillText("Press R, Space, or tap to restart", canvas.width / 2, 155);
+      }
+    }
+
     function drawScore() {
       scoreEl.textContent = score;
     }
 
-    function drawGameOver() {
-      if (!gameOver) return;
-
-      ctx.fillStyle = "rgba(0,0,0,0.65)";
-      ctx.fillRect(canvas.width / 2 - 160, 95, 320, 90);
-
-      ctx.fillStyle = "#fff";
-      ctx.textAlign = "center";
-      ctx.font = "bold 30px Arial";
-      ctx.fillText("GAME OVER", canvas.width / 2, 130);
-
-      ctx.font = "18px Arial";
-      ctx.fillText("Press R to restart", canvas.width / 2, 160);
-    }
-
-    function loop() {
+    function gameLoop() {
       drawBackground();
 
-      if (!gameOver) {
+      if (gameStarted && !gameOver) {
+        speed += 0.003;
+        speed = Math.min(speed, 14);
+
         updatePlayer();
         updateEnemies();
+        updateGround();
         checkCollision();
       }
 
       drawPlayer();
       drawEnemies();
+      drawOverlay();
       drawScore();
-      drawGameOver();
 
-      animationId = requestAnimationFrame(loop);
+      requestAnimationFrame(gameLoop);
+    }
+
+    function handleCanvasTap() {
+      if (!gameStarted) {
+        startGame();
+        return;
+      }
+
+      if (gameOver) {
+        restartGame();
+        return;
+      }
+
+      jump();
     }
 
     document.addEventListener("keydown", (e) => {
-      if (e.code === "Space" || e.code === "ArrowUp") {
+      if (e.code === "Space") {
         e.preventDefault();
-        jump();
+
+        if (!gameStarted) {
+          startGame();
+        } else if (gameOver) {
+          restartGame();
+        } else {
+          jump();
+        }
+      }
+
+      if (e.code === "ArrowUp") {
+        e.preventDefault();
+        if (gameStarted && !gameOver) {
+          jump();
+        }
       }
 
       if (e.code === "KeyR") {
-        resetGame();
+        restartGame();
       }
     });
 
     canvas.addEventListener("pointerdown", () => {
-      jump();
+      handleCanvasTap();
+    });
+
+    startBtn.addEventListener("click", () => {
+      if (!gameStarted || gameOver) {
+        startGame();
+      }
+    });
+
+    jumpBtn.addEventListener("click", () => {
+      handleCanvasTap();
+    });
+
+    restartBtn.addEventListener("click", () => {
+      restartGame();
     });
 
     resetGame();
-    loop();
+    gameLoop();
   </script>
 </body>
 </html>
