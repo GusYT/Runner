@@ -1,558 +1,259 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>The Dino</title>
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #f5f5f5;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      padding: 20px;
-    }
-
-    .game-shell {
-      width: min(1000px, 96vw);
-    }
-
-    .hud {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-      color: #222;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .title {
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-
-    .scoreboard {
-      display: flex;
-      gap: 18px;
-      font-weight: 700;
-      font-size: 1rem;
-    }
-
-    canvas {
-      width: 100%;
-      height: auto;
-      display: block;
-      background: #ffffff;
-      border: 2px solid #222;
-      border-radius: 14px;
-      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
-    }
-
-    .controls {
-      margin-top: 12px;
-      text-align: center;
-      color: #555;
-      font-size: 0.95rem;
-    }
-
-    .buttons {
-      margin-top: 12px;
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    button {
-      border: none;
-      background: #222;
-      color: #fff;
-      padding: 10px 18px;
-      border-radius: 10px;
-      font-size: 0.95rem;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: #000;
-    }
-
-    @media (max-width: 640px) {
-      .title {
-        font-size: 1.2rem;
-      }
-
-      .scoreboard {
-        font-size: 0.92rem;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="game-shell">
-    <div class="hud">
-      <!-- =========================
-           TITLE AT TOP OF PAGE
-           Change "The Dino" here
-           ========================= -->
-      <div class="title">The Engineering speedrun</div>
-
-      <div class="scoreboard">
-        <div>Score: <span id="score">0</span></div>
-        <div>Best: <span id="best">0</span></div>
-      </div>
-    </div>
-
-    <canvas id="game" width="1000" height="320"></canvas>
-
-    <div class="buttons">
-      <button id="restartBtn">Start / Restart</button>
-    </div>
-
-    <div class="controls">
-      Press <strong>Space</strong>, <strong>↑</strong>, or <strong>W</strong> to jump.
-      On mobile, tap anywhere on the game.
-    </div>
-  </div>
-
-  <script>
-    const canvas = document.getElementById("game");
-    const ctx = canvas.getContext("2d");
-
-    const scoreEl = document.getElementById("score");
-    const bestEl = document.getElementById("best");
-    const restartBtn = document.getElementById("restartBtn");
-
-    const GROUND_Y = 255;
-    const DINO_X = 90;
-
-    let animationId;
-    let gameStarted = false;
-    let gameOver = false;
-    let score = 0;
-    let bestScore = Number(localStorage.getItem("dinoBestScore") || 0);
-    let speed = 7;
-    let spawnTimer = 0;
-    let groundOffset = 0;
-    let frameCount = 0;
-    let flashTimer = 0;
-
-    bestEl.textContent = bestScore;
-
-    const dino = {
-      x: DINO_X,
-      y: GROUND_Y - 48,
-      width: 44,
-      height: 48,
-      vy: 0,
-      gravity: 0.88,
-      jumpPower: -15.5,
-      grounded: true,
-      ducking: false
-    };
-
-    let obstacles = [];
-    let clouds = [];
-    let stars = [];
-    let isNight = false;
-
-    function setupScene() {
-      clouds = [
-        { x: 160, y: 60, w: 48, h: 16, s: 0.6 },
-        { x: 420, y: 85, w: 58, h: 18, s: 0.8 },
-        { x: 760, y: 55, w: 52, h: 17, s: 0.7 }
-      ];
-
-      stars = [];
-      for (let i = 0; i < 25; i++) {
-        stars.push({
-          x: Math.random() * canvas.width,
-          y: 20 + Math.random() * 110,
-          r: Math.random() * 1.8 + 0.4
-        });
-      }
-    }
-
-    function resetGame() {
-      cancelAnimationFrame(animationId);
-      gameStarted = true;
-      gameOver = false;
-      score = 0;
-      speed = 7;
-      spawnTimer = 55;
-      groundOffset = 0;
-      frameCount = 0;
-      flashTimer = 0;
-      isNight = false;
-
-      obstacles = [];
-      setupScene();
-
-      dino.y = GROUND_Y - dino.height;
-      dino.vy = 0;
-      dino.grounded = true;
-      dino.ducking = false;
-
-      update();
-    }
-
-    function jump() {
-      if (!gameStarted) {
-        resetGame();
-        return;
-      }
-
-      if (gameOver) {
-        resetGame();
-        return;
-      }
-
-      if (dino.grounded) {
-        dino.vy = dino.jumpPower;
-        dino.grounded = false;
-      }
-    }
-
-    function spawnObstacle() {
-      const r = Math.random();
-
-      if (r < 0.45) {
-        obstacles.push({
-          type: "smallCactus",
-          x: canvas.width + 20,
-          y: GROUND_Y - 38,
-          width: 20,
-          height: 38
-        });
-      } else if (r < 0.8) {
-        obstacles.push({
-          type: "tallCactus",
-          x: canvas.width + 20,
-          y: GROUND_Y - 52,
-          width: 26,
-          height: 52
-        });
-      } else {
-        obstacles.push({
-          type: "doubleCactus",
-          x: canvas.width + 20,
-          y: GROUND_Y - 40,
-          width: 42,
-          height: 40
-        });
-      }
-    }
-
-    function updateDino() {
-      dino.vy += dino.gravity;
-      dino.y += dino.vy;
-
-      if (dino.y >= GROUND_Y - dino.height) {
-        dino.y = GROUND_Y - dino.height;
-        dino.vy = 0;
-        dino.grounded = true;
-      }
-    }
-
-    function updateObstacles() {
-      spawnTimer--;
-
-      if (spawnTimer <= 0) {
-        spawnObstacle();
-        spawnTimer = Math.floor(68 + Math.random() * 42 - Math.min(speed, 10));
-      }
-
-      for (let i = obstacles.length - 1; i >= 0; i--) {
-        obstacles[i].x -= speed;
-
-        if (obstacles[i].x + obstacles[i].width < 0) {
-          obstacles.splice(i, 1);
-          score++;
-
-          if (score % 5 === 0) {
-            speed += 0.35;
-          }
-
-          if (score > bestScore) {
-            bestScore = score;
-            localStorage.setItem("dinoBestScore", bestScore);
-          }
-        }
-      }
-    }
-
-    function updateSky() {
-      for (const cloud of clouds) {
-        cloud.x -= cloud.s;
-        if (cloud.x + cloud.w < 0) {
-          cloud.x = canvas.width + Math.random() * 100;
-          cloud.y = 35 + Math.random() * 70;
-        }
-      }
-
-      frameCount++;
-
-      if (score > 0 && score % 20 >= 10) {
-        isNight = true;
-      } else {
-        isNight = false;
-      }
-    }
-
-    function updateGround() {
-      groundOffset += speed;
-      if (groundOffset > 32) groundOffset = 0;
-    }
-
-    function checkCollision() {
-      for (const obs of obstacles) {
-        const pad = 5;
-        const hit =
-          dino.x + pad < obs.x + obs.width &&
-          dino.x + dino.width - pad > obs.x &&
-          dino.y + pad < obs.y + obs.height &&
-          dino.y + dino.height - pad > obs.y;
-
-        if (hit) {
-          gameOver = true;
-          flashTimer = 10;
-          break;
-        }
-      }
-    }
-
-    function drawBackground() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (isNight) {
-        ctx.fillStyle = "#191919";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.fillStyle = "#e8e8e8";
-        for (const star of stars) {
-          ctx.beginPath();
-          ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        ctx.strokeStyle = "#d8d8d8";
-      } else {
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = "#444";
-      }
-
-      if (!isNight) {
-        ctx.fillStyle = "#d9d9d9";
-        for (const cloud of clouds) {
-          drawCloud(cloud.x, cloud.y, cloud.w, cloud.h);
-        }
-      }
-
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(0, GROUND_Y);
-      ctx.lineTo(canvas.width, GROUND_Y);
-      ctx.stroke();
-
-      const groundColor = isNight ? "#d8d8d8" : "#888";
-      ctx.fillStyle = groundColor;
-
-      for (let i = -32; i < canvas.width + 40; i += 32) {
-        ctx.fillRect(i - groundOffset, GROUND_Y + 9, 16, 3);
-      }
-    }
-
-    function drawCloud(x, y, w, h) {
-      ctx.beginPath();
-      ctx.arc(x, y, h * 0.45, 0, Math.PI * 2);
-      ctx.arc(x + w * 0.25, y - h * 0.35, h * 0.42, 0, Math.PI * 2);
-      ctx.arc(x + w * 0.55, y - h * 0.1, h * 0.5, 0, Math.PI * 2);
-      ctx.arc(x + w * 0.8, y, h * 0.4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    /* ==========================================
-       DINO CHARACTER SHAPE IS DRAWN HERE
-       Edit these rectangles to change the dino
-       ========================================== */
- function drawDino() {
-
-  const px = 3;  // pixel size
-
-  const x = dino.x;
-  const y = dino.y;
-
-  ctx.imageSmoothingEnabled = false;
-
-  // helmet
-  ctx.fillStyle = "#E8D08A";
-  ctx.fillRect(x + px*5, y + px*0, px*8, px*3);
-
-  ctx.fillStyle = "#C9B26F";
-  ctx.fillRect(x + px*4, y + px*2, px*10, px*2);
-
-  // face
-  ctx.fillStyle = "#F2C7A0";
-  ctx.fillRect(x + px*6, y + px*3, px*6, px*4);
-
-  // eyes
-  ctx.fillStyle = "#222";
-  ctx.fillRect(x + px*7, y + px*4, px, px);
-  ctx.fillRect(x + px*10, y + px*4, px, px);
-
-  // mouth
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(x + px*7, y + px*6, px*4, px);
-
-  // body
-  ctx.fillStyle = "#2E5C8A";
-  ctx.fillRect(x + px*5, y + px*7, px*8, px*6);
-
-  // suspenders
-  ctx.fillStyle = "#C8A22A";
-  ctx.fillRect(x + px*6, y + px*7, px, px*6);
-  ctx.fillRect(x + px*11, y + px*7, px, px*6);
-
-  // legs
-  ctx.fillStyle = "#4A6FA5";
-  ctx.fillRect(x + px*6, y + px*13, px*2, px*4);
-  ctx.fillRect(x + px*10, y + px*13, px*2, px*4);
-
-  // boots
-  ctx.fillStyle = "#7A4E2D";
-  ctx.fillRect(x + px*6, y + px*17, px*2, px);
-  ctx.fillRect(x + px*10, y + px*17, px*2, px);
-
-  // arms
-  ctx.fillStyle = "#F2C7A0";
-  ctx.fillRect(x + px*2, y + px*8, px*3, px);
-  ctx.fillRect(x + px*13, y + px*8, px*3, px);
-
-  // wrench left
-  ctx.fillStyle = "#888";
-  ctx.fillRect(x + px*0, y + px*8, px*2, px);
-
-  // wrench right
-  ctx.fillRect(x + px*16, y + px*8, px*2, px);
+<meta charset="UTF-8">
+<title>Overwatch Runner</title>
+
+<style>
+
+body{
+margin:0;
+background:#111;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+font-family:Arial;
+color:white;
 }
 
-    /* ==========================================
-       CACTUS SHAPE IS DRAWN HERE
-       Edit this function to change obstacles
-       ========================================== */
-    function drawObstacles() {
-      const c = isNight ? "#f0f0f0" : "#2f7d32";
-      ctx.fillStyle = c;
+canvas{
+background:#1e1e1e;
+border:3px solid white;
+border-radius:10px;
+}
 
-      for (const obs of obstacles) {
-        if (obs.type === "smallCactus") {
-          ctx.fillRect(obs.x + 6, obs.y, 8, obs.height);
-          ctx.fillRect(obs.x, obs.y + 12, 6, 12);
-          ctx.fillRect(obs.x + 14, obs.y + 8, 6, 14);
-        } else if (obs.type === "tallCactus") {
-          ctx.fillRect(obs.x + 8, obs.y, 10, obs.height);
-          ctx.fillRect(obs.x + 1, obs.y + 16, 7, 16);
-          ctx.fillRect(obs.x + 18, obs.y + 10, 7, 18);
-        } else {
-          ctx.fillRect(obs.x + 4, obs.y + 4, 8, obs.height - 4);
-          ctx.fillRect(obs.x + 18, obs.y, 8, obs.height);
-          ctx.fillRect(obs.x + 30, obs.y + 6, 8, obs.height - 6);
-        }
-      }
-    }
+</style>
 
-    function drawMessages() {
-      ctx.textAlign = "center";
+</head>
 
-      if (!gameStarted) {
-        ctx.fillStyle = isNight ? "#f0f0f0" : "#222";
-        ctx.font = "bold 30px Arial";
+<body>
 
-        /* ==========================================
-           TITLE INSIDE THE GAME SCREEN
-           Change the text here too
-           ========================================== */
-        ctx.fillText("Autodesk Man", canvas.width / 2, 90);
+<canvas id="game" width="1000" height="300"></canvas>
 
-        ctx.font = "18px Arial";
-        ctx.fillText("Press Space to Start", canvas.width / 2, 126);
-      }
+<script>
 
-      if (gameOver) {
-        ctx.fillStyle = isNight ? "rgba(20,20,20,0.82)" : "rgba(255,255,255,0.88)";
-        ctx.fillRect(canvas.width / 2 - 155, 88, 310, 96);
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-        ctx.fillStyle = isNight ? "#f0f0f0" : "#111";
-        ctx.font = "bold 30px Arial";
-        ctx.fillText("Game Over", canvas.width / 2, 125);
+ctx.imageSmoothingEnabled = false;
 
-        ctx.font = "18px Arial";
-        ctx.fillText("Press Space or Restart", canvas.width / 2, 156);
-      }
-    }
+const GROUND = 240;
 
-    function drawFlash() {
-      if (flashTimer > 0) {
-        ctx.fillStyle = "rgba(255, 0, 0, 0.08)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        flashTimer--;
-      }
-    }
+let score = 0;
+let speed = 6;
+let gameOver = false;
+let spawnTimer = 0;
 
-    function update() {
-      drawBackground();
+const doomfist = new Image();
+doomfist.src = "Doomfist.png";
 
-      if (gameStarted && !gameOver) {
-        updateDino();
-        updateObstacles();
-        updateSky();
-        updateGround();
-        checkCollision();
-      } else {
-        updateSky();
-      }
+const ana = new Image();
+ana.src = "Ana.png";
 
-      drawDino();
-      drawObstacles();
-      drawMessages();
-      drawFlash();
+const player = {
+x:80,
+y:GROUND-100,
+width:90,
+height:100,
+vy:0,
+gravity:0.9,
+jumpPower:-16,
+grounded:true
+};
 
-      scoreEl.textContent = score;
-      bestEl.textContent = bestScore;
+let enemies = [];
 
-      animationId = requestAnimationFrame(update);
-    }
+function jump(){
 
-    function handleJumpInput(e) {
-      if (
-        e.code === "Space" ||
-        e.code === "ArrowUp" ||
-        e.code === "KeyW"
-      ) {
-        e.preventDefault();
-        jump();
-      }
-    }
+if(player.grounded){
+player.vy = player.jumpPower;
+player.grounded = false;
+}
 
-    document.addEventListener("keydown", handleJumpInput);
+}
 
-    canvas.addEventListener("pointerdown", () => {
-      jump();
-    });
+document.addEventListener("keydown",(e)=>{
+if(e.code==="Space" || e.code==="ArrowUp"){
+jump();
+}
+});
 
-    restartBtn.addEventListener("click", resetGame);
+canvas.addEventListener("click",jump);
 
-    setupScene();
-    update();
-  </script>
+function spawnEnemy(){
+
+enemies.push({
+x:canvas.width+40,
+y:GROUND-90,
+width:80,
+height:90
+});
+
+}
+
+function updatePlayer(){
+
+player.vy += player.gravity;
+player.y += player.vy;
+
+if(player.y >= GROUND-player.height){
+
+player.y = GROUND-player.height;
+player.vy = 0;
+player.grounded = true;
+
+}
+
+}
+
+function updateEnemies(){
+
+spawnTimer--;
+
+if(spawnTimer<=0){
+
+spawnEnemy();
+
+spawnTimer = 80 + Math.random()*60;
+
+}
+
+for(let i=enemies.length-1;i>=0;i--){
+
+enemies[i].x -= speed;
+
+if(enemies[i].x + enemies[i].width < 0){
+
+enemies.splice(i,1);
+score++;
+
+if(score%5===0) speed += 0.5;
+
+}
+
+}
+
+}
+
+function collision(){
+
+for(let enemy of enemies){
+
+const hit =
+player.x+20 < enemy.x+enemy.width &&
+player.x+player.width-20 > enemy.x &&
+player.y+10 < enemy.y+enemy.height &&
+player.y+player.height-10 > enemy.y;
+
+if(hit){
+gameOver = true;
+}
+
+}
+
+}
+
+function drawGround(){
+
+ctx.strokeStyle="white";
+ctx.lineWidth=2;
+
+ctx.beginPath();
+ctx.moveTo(0,GROUND);
+ctx.lineTo(canvas.width,GROUND);
+ctx.stroke();
+
+}
+
+function drawPlayer(){
+
+ctx.drawImage(
+doomfist,
+player.x,
+player.y,
+player.width,
+player.height
+);
+
+}
+
+function drawEnemies(){
+
+for(let enemy of enemies){
+
+ctx.drawImage(
+ana,
+enemy.x,
+enemy.y,
+enemy.width,
+enemy.height
+);
+
+}
+
+}
+
+function drawScore(){
+
+ctx.fillStyle="white";
+ctx.font="20px Arial";
+ctx.fillText("Score: "+score,20,30);
+
+}
+
+function drawGameOver(){
+
+ctx.fillStyle="white";
+ctx.font="40px Arial";
+ctx.fillText("GAME OVER",400,140);
+
+ctx.font="20px Arial";
+ctx.fillText("Press SPACE to restart",410,180);
+
+}
+
+function update(){
+
+ctx.clearRect(0,0,canvas.width,canvas.height);
+
+drawGround();
+
+if(!gameOver){
+
+updatePlayer();
+updateEnemies();
+collision();
+
+}
+
+drawPlayer();
+drawEnemies();
+drawScore();
+
+if(gameOver){
+
+drawGameOver();
+
+}
+
+requestAnimationFrame(update);
+
+}
+
+document.addEventListener("keydown",(e)=>{
+
+if(gameOver && e.code==="Space"){
+
+location.reload();
+
+}
+
+});
+
+update();
+
+</script>
+
 </body>
 </html>
