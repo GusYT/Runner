@@ -384,39 +384,66 @@
        DINO CHARACTER SHAPE IS DRAWN HERE
        Edit these rectangles to change the dino
        ========================================== */
-    function drawDino() {
-      const c = isNight ? "#f0f0f0" : "#222";
-      const eye = isNight ? "#111" : "#fff";
-      const legLift = (!dino.grounded && !gameOver) ? 0 : (Math.floor(frameCount / 6) % 2) * 4;
+ function drawDino() {
 
-      ctx.fillStyle = c;
+  const px = 3;  // pixel size
 
-      // tail
-      ctx.fillRect(dino.x + 2, dino.y + 18, 10, 6);
+  const x = dino.x;
+  const y = dino.y;
 
-      // body
-      ctx.fillRect(dino.x + 8, dino.y + 16, 24, 18);
+  ctx.imageSmoothingEnabled = false;
 
-      // neck
-      ctx.fillRect(dino.x + 24, dino.y + 8, 8, 12);
+  // helmet
+  ctx.fillStyle = "#E8D08A";
+  ctx.fillRect(x + px*5, y + px*0, px*8, px*3);
 
-      // head
-      ctx.fillRect(dino.x + 26, dino.y, 16, 14);
+  ctx.fillStyle = "#C9B26F";
+  ctx.fillRect(x + px*4, y + px*2, px*10, px*2);
 
-      // mouth / nose block
-      ctx.fillRect(dino.x + 38, dino.y + 6, 8, 4);
+  // face
+  ctx.fillStyle = "#F2C7A0";
+  ctx.fillRect(x + px*6, y + px*3, px*6, px*4);
 
-      // arm
-      ctx.fillRect(dino.x + 18, dino.y + 22, 6, 10);
+  // eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(x + px*7, y + px*4, px, px);
+  ctx.fillRect(x + px*10, y + px*4, px, px);
 
-      // legs
-      ctx.fillRect(dino.x + 12, dino.y + 34 + legLift, 6, 14 - legLift);
-      ctx.fillRect(dino.x + 26, dino.y + 34 + (4 - legLift), 6, 10 + legLift);
+  // mouth
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(x + px*7, y + px*6, px*4, px);
 
-      // eye
-      ctx.fillStyle = eye;
-      ctx.fillRect(dino.x + 31, dino.y + 3, 3, 3);
-    }
+  // body
+  ctx.fillStyle = "#2E5C8A";
+  ctx.fillRect(x + px*5, y + px*7, px*8, px*6);
+
+  // suspenders
+  ctx.fillStyle = "#C8A22A";
+  ctx.fillRect(x + px*6, y + px*7, px, px*6);
+  ctx.fillRect(x + px*11, y + px*7, px, px*6);
+
+  // legs
+  ctx.fillStyle = "#4A6FA5";
+  ctx.fillRect(x + px*6, y + px*13, px*2, px*4);
+  ctx.fillRect(x + px*10, y + px*13, px*2, px*4);
+
+  // boots
+  ctx.fillStyle = "#7A4E2D";
+  ctx.fillRect(x + px*6, y + px*17, px*2, px);
+  ctx.fillRect(x + px*10, y + px*17, px*2, px);
+
+  // arms
+  ctx.fillStyle = "#F2C7A0";
+  ctx.fillRect(x + px*2, y + px*8, px*3, px);
+  ctx.fillRect(x + px*13, y + px*8, px*3, px);
+
+  // wrench left
+  ctx.fillStyle = "#888";
+  ctx.fillRect(x + px*0, y + px*8, px*2, px);
+
+  // wrench right
+  ctx.fillRect(x + px*16, y + px*8, px*2, px);
+}
 
     /* ==========================================
        CACTUS SHAPE IS DRAWN HERE
