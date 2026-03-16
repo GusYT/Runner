@@ -11,59 +11,63 @@
 
     body {
       margin: 0;
-      background: linear-gradient(to bottom, #f7f7f7, #ececec);
       font-family: Arial, sans-serif;
+      background: #f5f5f5;
       display: flex;
       justify-content: center;
       align-items: center;
       min-height: 100vh;
+      padding: 20px;
     }
 
     .game-shell {
-      width: min(900px, 95vw);
+      width: min(1000px, 96vw);
     }
 
-    .topbar {
+    .hud {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 10px;
-      padding: 0 4px;
-      color: #333;
+      color: #222;
+      gap: 12px;
+      flex-wrap: wrap;
     }
 
     .title {
-      font-size: 1.4rem;
+      font-size: 1.5rem;
       font-weight: 700;
     }
 
-    .info {
+    .scoreboard {
+      display: flex;
+      gap: 18px;
+      font-weight: 700;
       font-size: 1rem;
-      font-weight: 600;
     }
 
     canvas {
       width: 100%;
       height: auto;
+      display: block;
       background: #ffffff;
       border: 2px solid #222;
       border-radius: 14px;
-      display: block;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
     }
 
     .controls {
       margin-top: 12px;
+      text-align: center;
       color: #555;
       font-size: 0.95rem;
-      text-align: center;
     }
 
-    .btn-row {
+    .buttons {
       margin-top: 12px;
       display: flex;
-      gap: 10px;
       justify-content: center;
+      gap: 10px;
       flex-wrap: wrap;
     }
 
@@ -80,70 +84,123 @@
     button:hover {
       background: #000;
     }
+
+    @media (max-width: 640px) {
+      .title {
+        font-size: 1.2rem;
+      }
+
+      .scoreboard {
+        font-size: 0.92rem;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="game-shell">
-    <div class="topbar">
-      <div class="title">The Dino</div>
-      <div class="info">Score: <span id="score">0</span></div>
+    <div class="hud">
+      <!-- =========================
+           TITLE AT TOP OF PAGE
+           Change "The Dino" here
+           ========================= -->
+      <div class="title">The Engineering speedrun</div>
+
+      <div class="scoreboard">
+        <div>Score: <span id="score">0</span></div>
+        <div>Best: <span id="best">0</span></div>
+      </div>
     </div>
 
-    <canvas id="game" width="900" height="300"></canvas>
+    <canvas id="game" width="1000" height="320"></canvas>
 
-    <div class="btn-row">
-      <button id="startBtn">Start / Restart</button>
+    <div class="buttons">
+      <button id="restartBtn">Start / Restart</button>
     </div>
 
     <div class="controls">
-      Press <strong>Space</strong>, <strong>W</strong>, or <strong>↑</strong> to jump
+      Press <strong>Space</strong>, <strong>↑</strong>, or <strong>W</strong> to jump.
+      On mobile, tap anywhere on the game.
     </div>
   </div>
 
   <script>
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
-    const scoreEl = document.getElementById("score");
-    const startBtn = document.getElementById("startBtn");
 
-    const groundY = 240;
+    const scoreEl = document.getElementById("score");
+    const bestEl = document.getElementById("best");
+    const restartBtn = document.getElementById("restartBtn");
+
+    const GROUND_Y = 255;
+    const DINO_X = 90;
+
     let animationId;
     let gameStarted = false;
     let gameOver = false;
     let score = 0;
-    let speed = 6;
+    let bestScore = Number(localStorage.getItem("dinoBestScore") || 0);
+    let speed = 7;
     let spawnTimer = 0;
+    let groundOffset = 0;
+    let frameCount = 0;
+    let flashTimer = 0;
+
+    bestEl.textContent = bestScore;
 
     const dino = {
-      x: 80,
-      y: groundY - 44,
-      width: 40,
-      height: 44,
+      x: DINO_X,
+      y: GROUND_Y - 48,
+      width: 44,
+      height: 48,
       vy: 0,
-      gravity: 0.85,
-      jumpPower: -14,
-      grounded: true
+      gravity: 0.88,
+      jumpPower: -15.5,
+      grounded: true,
+      ducking: false
     };
 
     let obstacles = [];
     let clouds = [];
+    let stars = [];
+    let isNight = false;
+
+    function setupScene() {
+      clouds = [
+        { x: 160, y: 60, w: 48, h: 16, s: 0.6 },
+        { x: 420, y: 85, w: 58, h: 18, s: 0.8 },
+        { x: 760, y: 55, w: 52, h: 17, s: 0.7 }
+      ];
+
+      stars = [];
+      for (let i = 0; i < 25; i++) {
+        stars.push({
+          x: Math.random() * canvas.width,
+          y: 20 + Math.random() * 110,
+          r: Math.random() * 1.8 + 0.4
+        });
+      }
+    }
 
     function resetGame() {
       cancelAnimationFrame(animationId);
       gameStarted = true;
       gameOver = false;
       score = 0;
-      speed = 6;
-      spawnTimer = 0;
+      speed = 7;
+      spawnTimer = 55;
+      groundOffset = 0;
+      frameCount = 0;
+      flashTimer = 0;
+      isNight = false;
+
       obstacles = [];
-      clouds = [
-        { x: 180, y: 60, w: 46, h: 18, s: 1.2 },
-        { x: 500, y: 90, w: 54, h: 20, s: 0.9 },
-        { x: 760, y: 50, w: 42, h: 16, s: 1.0 }
-      ];
-      dino.y = groundY - dino.height;
+      setupScene();
+
+      dino.y = GROUND_Y - dino.height;
       dino.vy = 0;
       dino.grounded = true;
+      dino.ducking = false;
+
       update();
     }
 
@@ -152,31 +209,44 @@
         resetGame();
         return;
       }
-      if (dino.grounded && !gameOver) {
-        dino.vy = dino.jumpPower;
-        dino.grounded = false;
-      }
+
       if (gameOver) {
         resetGame();
+        return;
+      }
+
+      if (dino.grounded) {
+        dino.vy = dino.jumpPower;
+        dino.grounded = false;
       }
     }
 
     function spawnObstacle() {
-      const type = Math.random() < 0.75 ? "cactusSmall" : "cactusTall";
+      const r = Math.random();
 
-      if (type === "cactusSmall") {
+      if (r < 0.45) {
         obstacles.push({
+          type: "smallCactus",
           x: canvas.width + 20,
-          y: groundY - 36,
-          width: 22,
-          height: 36
+          y: GROUND_Y - 38,
+          width: 20,
+          height: 38
+        });
+      } else if (r < 0.8) {
+        obstacles.push({
+          type: "tallCactus",
+          x: canvas.width + 20,
+          y: GROUND_Y - 52,
+          width: 26,
+          height: 52
         });
       } else {
         obstacles.push({
+          type: "doubleCactus",
           x: canvas.width + 20,
-          y: groundY - 50,
-          width: 28,
-          height: 50
+          y: GROUND_Y - 40,
+          width: 42,
+          height: 40
         });
       }
     }
@@ -185,8 +255,8 @@
       dino.vy += dino.gravity;
       dino.y += dino.vy;
 
-      if (dino.y >= groundY - dino.height) {
-        dino.y = groundY - dino.height;
+      if (dino.y >= GROUND_Y - dino.height) {
+        dino.y = GROUND_Y - dino.height;
         dino.vy = 0;
         dino.grounded = true;
       }
@@ -197,7 +267,7 @@
 
       if (spawnTimer <= 0) {
         spawnObstacle();
-        spawnTimer = Math.floor(70 + Math.random() * 45);
+        spawnTimer = Math.floor(68 + Math.random() * 42 - Math.min(speed, 10));
       }
 
       for (let i = obstacles.length - 1; i >= 0; i--) {
@@ -206,32 +276,55 @@
         if (obstacles[i].x + obstacles[i].width < 0) {
           obstacles.splice(i, 1);
           score++;
-          if (score % 5 === 0) speed += 0.35;
+
+          if (score % 5 === 0) {
+            speed += 0.35;
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            localStorage.setItem("dinoBestScore", bestScore);
+          }
         }
       }
     }
 
-    function updateClouds() {
+    function updateSky() {
       for (const cloud of clouds) {
         cloud.x -= cloud.s;
         if (cloud.x + cloud.w < 0) {
-          cloud.x = canvas.width + Math.random() * 120;
+          cloud.x = canvas.width + Math.random() * 100;
           cloud.y = 35 + Math.random() * 70;
         }
       }
+
+      frameCount++;
+
+      if (score > 0 && score % 20 >= 10) {
+        isNight = true;
+      } else {
+        isNight = false;
+      }
+    }
+
+    function updateGround() {
+      groundOffset += speed;
+      if (groundOffset > 32) groundOffset = 0;
     }
 
     function checkCollision() {
       for (const obs of obstacles) {
-        const padding = 6;
+        const pad = 5;
         const hit =
-          dino.x + padding < obs.x + obs.width &&
-          dino.x + dino.width - padding > obs.x &&
-          dino.y + padding < obs.y + obs.height &&
-          dino.y + dino.height - padding > obs.y;
+          dino.x + pad < obs.x + obs.width &&
+          dino.x + dino.width - pad > obs.x &&
+          dino.y + pad < obs.y + obs.height &&
+          dino.y + dino.height - pad > obs.y;
 
         if (hit) {
           gameOver = true;
+          flashTimer = 10;
+          break;
         }
       }
     }
@@ -239,72 +332,152 @@
     function drawBackground() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      for (const cloud of clouds) {
-        ctx.fillStyle = "#d9d9d9";
-        ctx.beginPath();
-        ctx.arc(cloud.x, cloud.y, 12, 0, Math.PI * 2);
-        ctx.arc(cloud.x + 14, cloud.y - 8, 10, 0, Math.PI * 2);
-        ctx.arc(cloud.x + 28, cloud.y, 13, 0, Math.PI * 2);
-        ctx.fill();
+      if (isNight) {
+        ctx.fillStyle = "#191919";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "#e8e8e8";
+        for (const star of stars) {
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.strokeStyle = "#d8d8d8";
+      } else {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = "#444";
       }
 
-      ctx.strokeStyle = "#444";
+      if (!isNight) {
+        ctx.fillStyle = "#d9d9d9";
+        for (const cloud of clouds) {
+          drawCloud(cloud.x, cloud.y, cloud.w, cloud.h);
+        }
+      }
+
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(0, groundY);
-      ctx.lineTo(canvas.width, groundY);
+      ctx.moveTo(0, GROUND_Y);
+      ctx.lineTo(canvas.width, GROUND_Y);
       ctx.stroke();
 
-      ctx.fillStyle = "#999";
-      for (let i = 0; i < canvas.width; i += 32) {
-        ctx.fillRect(i, groundY + 10, 16, 3);
+      const groundColor = isNight ? "#d8d8d8" : "#888";
+      ctx.fillStyle = groundColor;
+
+      for (let i = -32; i < canvas.width + 40; i += 32) {
+        ctx.fillRect(i - groundOffset, GROUND_Y + 9, 16, 3);
       }
     }
 
-    function drawDino() {
-      ctx.fillStyle = "#222";
-
-      ctx.fillRect(dino.x + 10, dino.y, 22, 22);
-      ctx.fillRect(dino.x, dino.y + 18, 34, 16);
-      ctx.fillRect(dino.x + 8, dino.y + 34, 6, 10);
-      ctx.fillRect(dino.x + 24, dino.y + 34, 6, 10);
-      ctx.fillRect(dino.x + 30, dino.y + 8, 8, 6);
-
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(dino.x + 24, dino.y + 5, 4, 4);
+    function drawCloud(x, y, w, h) {
+      ctx.beginPath();
+      ctx.arc(x, y, h * 0.45, 0, Math.PI * 2);
+      ctx.arc(x + w * 0.25, y - h * 0.35, h * 0.42, 0, Math.PI * 2);
+      ctx.arc(x + w * 0.55, y - h * 0.1, h * 0.5, 0, Math.PI * 2);
+      ctx.arc(x + w * 0.8, y, h * 0.4, 0, Math.PI * 2);
+      ctx.fill();
     }
 
+    /* ==========================================
+       DINO CHARACTER SHAPE IS DRAWN HERE
+       Edit these rectangles to change the dino
+       ========================================== */
+    function drawDino() {
+      const c = isNight ? "#f0f0f0" : "#222";
+      const eye = isNight ? "#111" : "#fff";
+      const legLift = (!dino.grounded && !gameOver) ? 0 : (Math.floor(frameCount / 6) % 2) * 4;
+
+      ctx.fillStyle = c;
+
+      // tail
+      ctx.fillRect(dino.x + 2, dino.y + 18, 10, 6);
+
+      // body
+      ctx.fillRect(dino.x + 8, dino.y + 16, 24, 18);
+
+      // neck
+      ctx.fillRect(dino.x + 24, dino.y + 8, 8, 12);
+
+      // head
+      ctx.fillRect(dino.x + 26, dino.y, 16, 14);
+
+      // mouth / nose block
+      ctx.fillRect(dino.x + 38, dino.y + 6, 8, 4);
+
+      // arm
+      ctx.fillRect(dino.x + 18, dino.y + 22, 6, 10);
+
+      // legs
+      ctx.fillRect(dino.x + 12, dino.y + 34 + legLift, 6, 14 - legLift);
+      ctx.fillRect(dino.x + 26, dino.y + 34 + (4 - legLift), 6, 10 + legLift);
+
+      // eye
+      ctx.fillStyle = eye;
+      ctx.fillRect(dino.x + 31, dino.y + 3, 3, 3);
+    }
+
+    /* ==========================================
+       CACTUS SHAPE IS DRAWN HERE
+       Edit this function to change obstacles
+       ========================================== */
     function drawObstacles() {
-      ctx.fillStyle = "#2f7d32";
+      const c = isNight ? "#f0f0f0" : "#2f7d32";
+      ctx.fillStyle = c;
+
       for (const obs of obstacles) {
-        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-        ctx.fillRect(obs.x - 5, obs.y + 12, 6, 12);
-        ctx.fillRect(obs.x + obs.width - 1, obs.y + 8, 6, 14);
+        if (obs.type === "smallCactus") {
+          ctx.fillRect(obs.x + 6, obs.y, 8, obs.height);
+          ctx.fillRect(obs.x, obs.y + 12, 6, 12);
+          ctx.fillRect(obs.x + 14, obs.y + 8, 6, 14);
+        } else if (obs.type === "tallCactus") {
+          ctx.fillRect(obs.x + 8, obs.y, 10, obs.height);
+          ctx.fillRect(obs.x + 1, obs.y + 16, 7, 16);
+          ctx.fillRect(obs.x + 18, obs.y + 10, 7, 18);
+        } else {
+          ctx.fillRect(obs.x + 4, obs.y + 4, 8, obs.height - 4);
+          ctx.fillRect(obs.x + 18, obs.y, 8, obs.height);
+          ctx.fillRect(obs.x + 30, obs.y + 6, 8, obs.height - 6);
+        }
       }
     }
 
     function drawMessages() {
+      ctx.textAlign = "center";
+
       if (!gameStarted) {
-        ctx.fillStyle = "#222";
-        ctx.font = "bold 28px Arial";
-        ctx.textAlign = "center";
+        ctx.fillStyle = isNight ? "#f0f0f0" : "#222";
+        ctx.font = "bold 30px Arial";
+
+        /* ==========================================
+           TITLE INSIDE THE GAME SCREEN
+           Change the text here too
+           ========================================== */
         ctx.fillText("The Dino", canvas.width / 2, 90);
 
         ctx.font = "18px Arial";
-        ctx.fillText("Press Space to Start", canvas.width / 2, 130);
+        ctx.fillText("Press Space to Start", canvas.width / 2, 126);
       }
 
       if (gameOver) {
-        ctx.fillStyle = "rgba(255,255,255,0.82)";
-        ctx.fillRect(canvas.width / 2 - 150, 90, 300, 90);
+        ctx.fillStyle = isNight ? "rgba(20,20,20,0.82)" : "rgba(255,255,255,0.88)";
+        ctx.fillRect(canvas.width / 2 - 155, 88, 310, 96);
 
-        ctx.fillStyle = "#111";
+        ctx.fillStyle = isNight ? "#f0f0f0" : "#111";
         ctx.font = "bold 30px Arial";
-        ctx.textAlign = "center";
         ctx.fillText("Game Over", canvas.width / 2, 125);
 
         ctx.font = "18px Arial";
-        ctx.fillText("Press Space or Restart", canvas.width / 2, 155);
+        ctx.fillText("Press Space or Restart", canvas.width / 2, 156);
+      }
+    }
+
+    function drawFlash() {
+      if (flashTimer > 0) {
+        ctx.fillStyle = "rgba(255, 0, 0, 0.08)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        flashTimer--;
       }
     }
 
@@ -314,19 +487,25 @@
       if (gameStarted && !gameOver) {
         updateDino();
         updateObstacles();
-        updateClouds();
+        updateSky();
+        updateGround();
         checkCollision();
+      } else {
+        updateSky();
       }
 
       drawDino();
       drawObstacles();
       drawMessages();
+      drawFlash();
 
       scoreEl.textContent = score;
+      bestEl.textContent = bestScore;
+
       animationId = requestAnimationFrame(update);
     }
 
-    document.addEventListener("keydown", (e) => {
+    function handleJumpInput(e) {
       if (
         e.code === "Space" ||
         e.code === "ArrowUp" ||
@@ -335,10 +514,17 @@
         e.preventDefault();
         jump();
       }
+    }
+
+    document.addEventListener("keydown", handleJumpInput);
+
+    canvas.addEventListener("pointerdown", () => {
+      jump();
     });
 
-    startBtn.addEventListener("click", resetGame);
+    restartBtn.addEventListener("click", resetGame);
 
+    setupScene();
     update();
   </script>
 </body>
