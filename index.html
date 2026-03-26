@@ -181,7 +181,10 @@
       squashX: 1,
       squashY: 1,
       trailTimer: 0,
-      bob: 0
+      bob: 0,
+      dashLean: 0,
+      stepPulse: 0,
+      shadowScale: 1
     };
 
     let enemies = [];
@@ -198,6 +201,9 @@
       player.squashY = 1;
       player.trailTimer = 0;
       player.bob = 0;
+      player.dashLean = 0;
+      player.stepPulse = 0;
+      player.shadowScale = 1;
     }
 
     function resetGame() {
@@ -257,11 +263,11 @@
     function createTrail() {
       trails.push({
         x: player.x,
-        y: player.y,
-        width: player.width,
-        height: player.height,
+        y: player.y + player.bob,
+        width: player.width * player.squashX,
+        height: player.height * player.squashY,
         rotation: player.rotation,
-        alpha: 0.22
+        alpha: 0.18
       });
     }
 
@@ -306,8 +312,9 @@
         player.grounded = true;
 
         if (!wasGrounded) {
-          player.squashX = 1.18;
-          player.squashY = 0.84;
+          player.squashX = 1.2;
+          player.squashY = 0.82;
+          player.shadowScale = 1.2;
           createDust(player.x + 16, GROUND_Y - 3, 10, true);
         }
       } else {
@@ -315,25 +322,37 @@
       }
 
       if (player.grounded && gameStarted && !gameOver) {
-        player.runCycle += 0.24 + speed * 0.012;
-        player.bob = Math.sin(player.runCycle) * 4;
+        player.runCycle += 0.28 + speed * 0.015;
+        player.stepPulse = Math.sin(player.runCycle);
+        player.bob = Math.abs(Math.sin(player.runCycle)) * -6;
 
-        if (frame % 9 === 0) {
+        const targetLean = 0.08 + Math.min(speed * 0.008, 0.16);
+        player.dashLean += (targetLean - player.dashLean) * 0.12;
+        player.rotation += (player.dashLean - player.rotation) * 0.16;
+
+        const stretchWave = Math.sin(player.runCycle * 2);
+        player.squashX += ((1.03 + stretchWave * 0.04) - player.squashX) * 0.18;
+        player.squashY += ((0.98 - stretchWave * 0.03) - player.squashY) * 0.18;
+        player.shadowScale += ((1 - Math.abs(Math.sin(player.runCycle)) * 0.12) - player.shadowScale) * 0.18;
+
+        if (frame % 8 === 0) {
           createDust(player.x + 6, GROUND_Y - 2, 2, false);
         }
-
-        player.rotation += ((0.05 + Math.min(speed * 0.006, 0.12)) - player.rotation) * 0.15;
       } else {
         player.bob = 0;
-        player.rotation += (Math.max(-0.22, Math.min(0.2, player.vy * 0.018)) - player.rotation) * 0.18;
+        player.dashLean += (0 - player.dashLean) * 0.1;
+
+        const airRotation = Math.max(-0.24, Math.min(0.2, player.vy * 0.018));
+        player.rotation += (airRotation - player.rotation) * 0.18;
+
+        player.squashX += (1 - player.squashX) * 0.16;
+        player.squashY += (1 - player.squashY) * 0.16;
+        player.shadowScale += (0.78 - player.shadowScale) * 0.12;
       }
 
-      player.squashX += (1 - player.squashX) * 0.18;
-      player.squashY += (1 - player.squashY) * 0.18;
-
-      if (gameStarted && !gameOver && speed > 9.2 && player.grounded) {
+      if (gameStarted && !gameOver && speed > 9 && player.grounded) {
         player.trailTimer++;
-        if (player.trailTimer >= 4) {
+        if (player.trailTimer >= 3) {
           createTrail();
           player.trailTimer = 0;
         }
@@ -392,7 +411,7 @@
 
     function updateTrails() {
       for (let i = trails.length - 1; i >= 0; i--) {
-        trails[i].alpha -= 0.035;
+        trails[i].alpha -= 0.03;
         trails[i].x -= speed * 0.2;
         if (trails[i].alpha <= 0) {
           trails.splice(i, 1);
@@ -527,18 +546,80 @@
       ctx.globalAlpha = 1;
     }
 
-    function drawPlayerImage(x, y, w, h, rotation, alpha = 1) {
-      const runSwing = player.grounded && gameStarted && !gameOver
-        ? Math.sin(player.runCycle * 1.8) * 0.06
-        : 0;
+    function drawPlayerShadow() {
+      const shadowWidth = player.width * 0.9 * player.shadowScale;
+      const shadowHeight = 10 * (2 - player.shadowScale);
 
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.ellipse(
+        player.x + player.width / 2,
+        GROUND_Y + 4,
+        shadowWidth / 2,
+        Math.max(4, shadowHeight / 2),
+        0,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawPlayerImage(x, y, w, h, rotation, alpha = 1) {
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.translate(x + w / 2, y + h / 2);
-      ctx.rotate(rotation + runSwing);
+      ctx.rotate(rotation);
 
       if (doomfist.complete && doomfist.naturalWidth > 0) {
-        ctx.drawImage(doomfist, -w / 2, -h / 2, w, h);
+        const run = player.grounded && gameStarted && !gameOver
+          ? Math.sin(player.runCycle * 2.2)
+          : 0;
+
+        const run2 = player.grounded && gameStarted && !gameOver
+          ? Math.sin(player.runCycle * 4.4)
+          : 0;
+
+        const srcW = doomfist.naturalWidth;
+        const srcH = doomfist.naturalHeight;
+
+        const dx = -w / 2;
+        const dy = -h / 2;
+
+        const slices = [
+          { sy: 0.00, sh: 0.18, ox: run * 1.5, oy: 0 },                   // head
+          { sy: 0.18, sh: 0.16, ox: run * 3.5, oy: -Math.abs(run) * 1 },  // shoulders
+          { sy: 0.34, sh: 0.18, ox: run * 2.2, oy: 0 },                   // chest
+          { sy: 0.52, sh: 0.14, ox: -run * 2.5, oy: Math.abs(run) * 1 },  // waist
+          { sy: 0.66, sh: 0.17, ox: run * 4.5, oy: 0 },                   // upper legs
+          { sy: 0.83, sh: 0.17, ox: -run * 5.5, oy: 0 }                   // lower legs
+        ];
+
+        for (const s of slices) {
+          const sy = srcH * s.sy;
+          const sh = srcH * s.sh;
+          const dh = h * s.sh;
+          const dySlice = dy + h * s.sy;
+
+          ctx.drawImage(
+            doomfist,
+            0, sy, srcW, sh,
+            dx + s.ox + run2 * 0.3,
+            dySlice + s.oy,
+            w,
+            dh
+          );
+        }
+
+        if (player.grounded && gameStarted && !gameOver) {
+          ctx.globalAlpha = alpha * 0.12;
+          ctx.drawImage(doomfist, dx - 8 - run * 2, dy + 2, w, h);
+
+          ctx.globalAlpha = alpha * 0.08;
+          ctx.drawImage(doomfist, dx - 15 - run * 3, dy + 4, w, h);
+        }
       } else {
         ctx.fillStyle = "#f0b";
         ctx.fillRect(-w / 2, -h / 2, w, h);
@@ -555,16 +636,25 @@
     }
 
     function drawPlayer() {
+      drawPlayerShadow();
+
       let drawW = player.width * player.squashX;
       let drawH = player.height * player.squashY;
 
-      if (player.grounded && gameStarted && !gameOver) {
-        drawW *= 1 + Math.sin(player.runCycle) * 0.025;
-        drawH *= 1 - Math.sin(player.runCycle) * 0.02;
-      }
+      const stride = player.grounded && gameStarted && !gameOver
+        ? Math.sin(player.runCycle)
+        : 0;
+
+      drawW *= 1 + Math.abs(stride) * 0.04;
+      drawH *= 1 - Math.abs(stride) * 0.03;
 
       const drawX = player.x;
       const drawY = player.y + player.bob;
+
+      if (speed > 10 && player.grounded && gameStarted && !gameOver) {
+        drawPlayerImage(drawX - 10, drawY + 2, drawW, drawH, player.rotation, 0.12);
+        drawPlayerImage(drawX - 18, drawY + 4, drawW, drawH, player.rotation, 0.06);
+      }
 
       drawPlayerImage(drawX, drawY, drawW, drawH, player.rotation, 1);
     }
