@@ -158,13 +158,13 @@
     let runTimer = 0;
 
     const player = {
-      x: 90,
-      y: GROUND_Y - 88,
-      width: 88,
-      height: 88,
+      x: 70,
+      y: GROUND_Y - 150,
+      width: 150,
+      height: 150,
       vy: 0,
       gravity: 0.85,
-      jumpPower: -15.5,
+      jumpPower: -18,
       grounded: true
     };
 
@@ -292,10 +292,10 @@
 
     function checkCollision() {
       const hitbox = {
-        x: player.x + 16,
-        y: player.y + 10,
-        width: player.width - 32,
-        height: player.height - 12
+        x: player.x + 30,
+        y: player.y + 18,
+        width: player.width - 60,
+        height: player.height - 24
       };
 
       for (const enemy of enemies) {
