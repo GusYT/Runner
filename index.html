@@ -127,12 +127,21 @@
     let gameStarted = false;
     let spawnTimer = 0;
     let groundOffset = 0;
+    let frame = 0;
+    let overlayPulse = 0;
 
     const doomfist = new Image();
     doomfist.src = "Doomfist.png";
 
     const ana = new Image();
     ana.src = "Ana.png";
+
+    const stars = Array.from({ length: 28 }, () => ({
+      x: Math.random() * canvas.width,
+      y: 25 + Math.random() * 130,
+      r: 1 + Math.random() * 2,
+      speed: 0.2 + Math.random() * 0.8
+    }));
 
     const player = {
       x: 90,
@@ -142,15 +151,26 @@
       vy: 0,
       gravity: 0.85,
       jumpPower: -15.5,
-      grounded: true
+      grounded: true,
+      runTime: 0,
+      squash: 1,
+      stretch: 1,
+      rotation: 0,
+      justLanded: false
     };
 
     let enemies = [];
+    let particles = [];
 
     function resetPlayer() {
       player.y = GROUND_Y - player.height;
       player.vy = 0;
       player.grounded = true;
+      player.runTime = 0;
+      player.squash = 1;
+      player.stretch = 1;
+      player.rotation = 0;
+      player.justLanded = false;
     }
 
     function resetGame() {
@@ -161,6 +181,8 @@
       spawnTimer = 60;
       groundOffset = 0;
       enemies = [];
+      particles = [];
+      frame = 0;
       resetPlayer();
       scoreEl.textContent = score;
     }
@@ -173,6 +195,8 @@
       spawnTimer = 60;
       groundOffset = 0;
       enemies = [];
+      particles = [];
+      frame = 0;
       resetPlayer();
       scoreEl.textContent = score;
     }
@@ -185,27 +209,51 @@
       spawnTimer = 60;
       groundOffset = 0;
       enemies = [];
+      particles = [];
+      frame = 0;
       resetPlayer();
       scoreEl.textContent = score;
+    }
+
+    function createDust(x, y, amount = 4, strong = false) {
+      for (let i = 0; i < amount; i++) {
+        particles.push({
+          x,
+          y,
+          vx: -(1 + Math.random() * (strong ? 4 : 2)) - speed * 0.1,
+          vy: -Math.random() * (strong ? 2.5 : 1.2),
+          size: 2 + Math.random() * 4,
+          life: 20 + Math.random() * 14,
+          maxLife: 20 + Math.random() * 14
+        });
+      }
     }
 
     function jump() {
       if (player.grounded) {
         player.vy = player.jumpPower;
         player.grounded = false;
+        player.stretch = 1.12;
+        player.squash = 0.9;
+        createDust(player.x + 16, GROUND_Y - 4, 7, true);
       }
     }
 
     function spawnEnemy() {
       enemies.push({
         x: canvas.width + 30,
+        baseY: GROUND_Y - 74,
         y: GROUND_Y - 74,
         width: 58,
-        height: 74
+        height: 74,
+        t: Math.random() * Math.PI * 2,
+        scale: 1
       });
     }
 
     function updatePlayer() {
+      const wasGrounded = player.grounded;
+
       player.vy += player.gravity;
       player.y += player.vy;
 
@@ -213,7 +261,32 @@
         player.y = GROUND_Y - player.height;
         player.vy = 0;
         player.grounded = true;
+
+        if (!wasGrounded) {
+          player.squash = 1.18;
+          player.stretch = 0.88;
+          createDust(player.x + 18, GROUND_Y - 3, 8, true);
+        }
+      } else {
+        player.grounded = false;
       }
+
+      if (player.grounded && gameStarted && !gameOver) {
+        player.runTime += 0.18 + speed * 0.01;
+
+        if (frame % 10 === 0) {
+          createDust(player.x + 8, GROUND_Y - 2, 2, false);
+        }
+      }
+
+      if (!player.grounded) {
+        player.rotation = Math.max(-0.2, Math.min(0.22, player.vy * 0.02));
+      } else {
+        player.rotation *= 0.75;
+      }
+
+      player.squash += (1 - player.squash) * 0.18;
+      player.stretch += (1 - player.stretch) * 0.18;
     }
 
     function updateEnemies() {
@@ -236,11 +309,29 @@
       }
 
       for (let i = enemies.length - 1; i >= 0; i--) {
-        enemies[i].x -= speed;
+        const enemy = enemies[i];
+        enemy.x -= speed;
+        enemy.t += 0.08;
+        enemy.y = enemy.baseY + Math.sin(enemy.t) * 4;
+        enemy.scale = 1 + Math.sin(enemy.t * 1.2) * 0.03;
 
-        if (enemies[i].x + enemies[i].width < 0) {
+        if (enemy.x + enemy.width < 0) {
           enemies.splice(i, 1);
           score++;
+        }
+      }
+    }
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.05;
+        p.life--;
+
+        if (p.life <= 0) {
+          particles.splice(i, 1);
         }
       }
     }
@@ -249,6 +340,16 @@
       groundOffset += speed;
       if (groundOffset >= 36) {
         groundOffset = 0;
+      }
+    }
+
+    function updateStars() {
+      for (const star of stars) {
+        star.x -= star.speed + speed * 0.08;
+        if (star.x < -5) {
+          star.x = canvas.width + 5;
+          star.y = 25 + Math.random() * 130;
+        }
       }
     }
 
@@ -276,6 +377,7 @@
 
         if (hit) {
           gameOver = true;
+          createDust(player.x + player.width / 2, player.y + player.height / 2, 14, true);
           break;
         }
       }
@@ -284,8 +386,18 @@
     function drawBackground() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = "#1a1a1f";
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, "#11131a");
+      gradient.addColorStop(1, "#1a1a1f");
+      ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (const star of stars) {
+        ctx.globalAlpha = 0.45 + Math.sin(frame * 0.03 + star.x * 0.01) * 0.2;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(star.x, star.y, star.r, star.r);
+      }
+      ctx.globalAlpha = 1;
 
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 2;
@@ -301,35 +413,77 @@
     }
 
     function drawPlayer() {
+      const bob = player.grounded && gameStarted && !gameOver
+        ? Math.sin(player.runTime) * 3
+        : 0;
+
+      let drawW = player.width * player.squash;
+      let drawH = player.height * player.stretch;
+
+      if (!player.grounded) {
+        drawW *= 0.98;
+        drawH *= 1.02;
+      }
+
+      const cx = player.x + player.width / 2;
+      const cy = player.y + player.height / 2 + bob;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(player.rotation);
+
       if (doomfist.complete && doomfist.naturalWidth > 0) {
         ctx.drawImage(
           doomfist,
-          player.x,
-          player.y,
-          player.width,
-          player.height
+          -drawW / 2,
+          -drawH / 2,
+          drawW,
+          drawH
         );
       } else {
         ctx.fillStyle = "#f0b";
-        ctx.fillRect(player.x, player.y, player.width, player.height);
+        ctx.fillRect(-drawW / 2, -drawH / 2, drawW, drawH);
       }
+
+      ctx.restore();
     }
 
     function drawEnemies() {
       for (const enemy of enemies) {
+        const w = enemy.width * enemy.scale;
+        const h = enemy.height * (2 - enemy.scale);
+        const cx = enemy.x + enemy.width / 2;
+        const cy = enemy.y + enemy.height / 2;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(Math.sin(enemy.t) * 0.03);
+
         if (ana.complete && ana.naturalWidth > 0) {
           ctx.drawImage(
             ana,
-            enemy.x,
-            enemy.y,
-            enemy.width,
-            enemy.height
+            -w / 2,
+            -h / 2,
+            w,
+            h
           );
         } else {
           ctx.fillStyle = "#6cf";
-          ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+          ctx.fillRect(-w / 2, -h / 2, w, h);
         }
+
+        ctx.restore();
       }
+    }
+
+    function drawParticles() {
+      for (const p of particles) {
+        const alpha = Math.max(0, p.life / p.maxLife);
+        ctx.globalAlpha = alpha * 0.8;
+        ctx.fillStyle = "#d8d8d8";
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+      }
+      ctx.globalAlpha = 1;
     }
 
     function drawOverlay() {
@@ -348,7 +502,9 @@
       }
 
       if (gameOver) {
-        ctx.fillStyle = "rgba(0,0,0,0.65)";
+        const pulse = 0.6 + Math.sin(overlayPulse) * 0.08;
+
+        ctx.fillStyle = `rgba(0,0,0,${pulse})`;
         ctx.fillRect(canvas.width / 2 - 180, 80, 360, 110);
 
         ctx.fillStyle = "#fff";
@@ -365,18 +521,27 @@
     }
 
     function gameLoop() {
+      frame++;
+      overlayPulse += 0.08;
+
       drawBackground();
 
       if (gameStarted && !gameOver) {
         speed += 0.003;
         speed = Math.min(speed, 14);
 
+        updateStars();
         updatePlayer();
         updateEnemies();
+        updateParticles();
         updateGround();
         checkCollision();
+      } else {
+        updateStars();
+        updateParticles();
       }
 
+      drawParticles();
       drawPlayer();
       drawEnemies();
       drawOverlay();
